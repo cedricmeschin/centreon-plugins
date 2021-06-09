@@ -54,7 +54,10 @@ sub new {
             'timeout:s'   => { name => 'timeout' },
             'header:s@'   => { name => 'header' },
             'timeframe:s' => { name => 'timeframe' },
-            'step:s'      => { name => 'step' }
+            'step:s'      => { name => 'step' },
+            'unknown-http-status:s'  => { name => 'unknown_http_status' },
+            'warning-http-status:s'  => { name => 'warning_http_status' },
+            'critical-http-status:s' => { name => 'critical_http_status' }
         });
     }
     $options{options}->add_help(package => __PACKAGE__, sections => 'REST API OPTIONS', once => 1);
@@ -76,7 +79,7 @@ sub set_defaults {}
 sub check_options {
     my ($self, %options) = @_;
 
-    $self->{hostname} = (defined($self->{option_results}->{hostname})) ? $self->{option_results}->{hostname} : undef;
+    $self->{hostname} = (defined($self->{option_results}->{hostname})) ? $self->{option_results}->{hostname} : '';
     $self->{port} = (defined($self->{option_results}->{port})) ? $self->{option_results}->{port} : 9090;
     $self->{proto} = (defined($self->{option_results}->{proto})) ? $self->{option_results}->{proto} : 'http';
     $self->{url_path} = (defined($self->{option_results}->{url_path})) ? $self->{option_results}->{url_path} : '/api/v1';
@@ -85,8 +88,11 @@ sub check_options {
     $self->{basic} = (defined($self->{option_results}->{basic})) ? 1 : undef;
     $self->{timeframe} = (defined($self->{option_results}->{timeframe})) ? $self->{option_results}->{timeframe} : undef;
     $self->{step} = (defined($self->{option_results}->{step})) ? $self->{option_results}->{step} : undef;
- 
-    if (!defined($self->{hostname}) || $self->{hostname} eq '') {
+    $self->{unknown_http_status} = (defined($self->{option_results}->{unknown_http_status})) ? $self->{option_results}->{unknown_http_status} : '%{http_code} < 200 or %{http_code} >= 300' ;
+    $self->{warning_http_status} = (defined($self->{option_results}->{warning_http_status})) ? $self->{option_results}->{warning_http_status} : '';
+    $self->{critical_http_status} = (defined($self->{option_results}->{critical_http_status})) ? $self->{option_results}->{critical_http_status} : '';
+
+    if ($self->{hostname} eq '') {
         $self->{output}->add_option_msg(short_msg => "Need to specify hostname option.");
         $self->{output}->option_exit();
     }
@@ -104,8 +110,6 @@ sub build_options_for_httplib {
     $self->{option_results}->{url_path} = $self->{url_path};
     $self->{option_results}->{credentials} = $self->{credentials};
     $self->{option_results}->{basic} = $self->{basic};
-    $self->{option_results}->{warning_status} = '';
-    $self->{option_results}->{critical_status} = '';
 }
 
 sub settings {
@@ -167,13 +171,14 @@ sub query {
 sub get_endpoint {
     my ($self, %options) = @_;
 
-    $self->settings;
-    
-    $self->{output}->output_add(long_msg => "Query URL: '" . $self->{proto} . "://" . $self->{hostname} .
-        $self->{url_path} . $options{url_path} . "'", debug => 1);
+    $self->settings();
+    my $response = $self->{http}->request(
+        url_path => $self->{url_path} . $options{url_path},
+        unknown_status => $self->{unknown_http_status},
+        warning_status => $self->{warning_http_status},
+        critical_status => $self->{critical_http_status}
+    );
 
-    my $response = $self->{http}->request(url_path => $self->{url_path} . $options{url_path});
-    
     my $content;
     eval {
         $content = JSON::XS->new->utf8->decode($response);

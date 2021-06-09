@@ -24,7 +24,7 @@ use base qw(centreon::plugins::templates::counter);
 
 use strict;
 use warnings;
-use centreon::plugins::templates::catalog_functions qw(catalog_status_threshold);
+use centreon::plugins::templates::catalog_functions qw(catalog_status_threshold_ng);
 
 sub custom_status_output {
     my ($self, %options) = @_;
@@ -43,7 +43,7 @@ sub custom_status_calc {
     $self->{result_values}->{display} = $options{new_datas}->{$self->{instance} . '_container'};
     $self->{result_values}->{pod} = $options{new_datas}->{$self->{instance} . '_pod'};
     $self->{result_values}->{status} = $options{new_datas}->{$self->{instance} . '_status'};
-    $self->{result_values}->{state} = ($options{new_datas}->{$self->{instance} . '_state'} == 1) ? "ready" : "not ready";
+    $self->{result_values}->{state} = ($options{new_datas}->{$self->{instance} . '_state'} == 1) ? 'ready' : 'not ready';
     $self->{result_values}->{reason} = $options{new_datas}->{$self->{instance} . '_reason'};
 
     return 0;
@@ -55,28 +55,28 @@ sub set_counters {
     $self->{maps_counters_type} = [
         { name => 'containers', type => 1, cb_prefix_output => 'prefix_container_output',
           message_multiple => 'All containers status are ok', message_separator => ' - ',
-          skipped_code => { -11 => 1 } },
+          skipped_code => { -11 => 1 } }
     ];
 
     $self->{maps_counters}->{containers} = [
-        { label => 'status', set => {
+        { label => 'status', type => 2, critical_default => '%{status} !~ /running/ || %{state} !~ /ready/', set => {
                 key_values => [ { name => 'status' }, { name => 'state' }, { name => 'reason' }, { name => 'pod' },
                     { name => 'container' } ],
                 closure_custom_calc => $self->can('custom_status_calc'),
                 closure_custom_output => $self->can('custom_status_output'),
                 closure_custom_perfdata => sub { return 0; },
-                closure_custom_threshold_check => \&catalog_status_threshold,
+                closure_custom_threshold_check => \&catalog_status_threshold_ng
             }
         },
         { label => 'restarts-count', nlabel => 'containers.restarts.count', set => {
                 key_values => [ { name => 'restarts' }, { name => 'perf' } ],
                 output_template => 'Restarts count : %d',
                 perfdatas => [
-                    { label => 'restarts_count', value => 'restarts', template => '%d',
-                      min => 0, label_extra_instance => 1, instance_use => 'perf' },
-                ],
+                    { label => 'restarts_count', template => '%d',
+                      min => 0, label_extra_instance => 1, instance_use => 'perf' }
+                ]
             }
-        },
+        }
     ];
 }
 
@@ -92,12 +92,10 @@ sub new {
     bless $self, $class;
     
     $options{options}->add_options(arguments => {
-        "container:s"           => { name => 'container', default => 'container=~".*"' },
-        "pod:s"                 => { name => 'pod', default => 'pod=~".*"' },
-        "warning-status:s"      => { name => 'warning_status', default => '' },
-        "critical-status:s"     => { name => 'critical_status', default => '%{status} !~ /running/ || %{state} !~ /ready/' },
-        "extra-filter:s@"       => { name => 'extra_filter' },
-        "metric-overload:s@"    => { name => 'metric_overload' },
+        'container:s'        => { name => 'container', default => 'container=~".*"' },
+        'pod:s'              => { name => 'pod', default => 'pod=~".*"' },
+        'extra-filter:s@'    => { name => 'extra_filter' },
+        'metric-overload:s@' => { name => 'metric_overload' }
     });
    
     return $self;
@@ -134,8 +132,6 @@ sub check_options {
     foreach my $filter (@{$self->{option_results}->{extra_filter}}) {
         $self->{extra_filter} .= ',' . $filter;
     }
-
-    $self->change_macros(macros => ['warning_status', 'critical_status']);
 }
 
 sub manage_selection {
